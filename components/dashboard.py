@@ -1,8 +1,8 @@
-import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+import plotly.io as pio
 from plotly.subplots import make_subplots
 from utils.preprocessing import find_column, detect_groups
 
@@ -18,32 +18,6 @@ PALETTES = {
     "sequential": ["#2563EB", "#60A5FA", "#93C5FD", "#A7F3D0", "#059669"],
     "categorical": ["#2563EB", "#059669", "#DC2626", "#D97706", "#0284C7", "#8B5CF6", "#14B8A6"]
 }
-
-def kpi_card(col, title, value, color_left, suffix="", prefix=""):
-    display = str(prefix) + str(value) + str(suffix)
-    col.markdown(f"""
-    <div class="kpi-card" style="border-left:3px solid {color_left};">
-        <div class="kpi-label">{title}</div>
-        <div class="kpi-value" style="color:{color_left}">{display}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-def kpi_metrics(df):
-    has_pred = "Prediction" in df.columns
-    c1, c2, c3, c4 = st.columns(4)
-    total = len(df)
-    kpi_card(c1, "Total Employees", total, COLORS["primary"])
-    if has_pred:
-        att_count = int(df["Prediction"].sum())
-        stay_count = total - att_count
-        att_rate = (att_count / total * 100)
-        kpi_card(c2, "Attrition Rate", f"{att_rate:.1f}", COLORS["danger"], suffix="%")
-        kpi_card(c3, "Likely to Leave", att_count, COLORS["danger"])
-        kpi_card(c4, "Likely to Stay", stay_count, COLORS["success"])
-    else:
-        c2.markdown("")
-        c3.markdown("")
-        c4.markdown("")
 
 def make_chart(fig, height=380):
     fig.update_layout(
@@ -111,93 +85,139 @@ def render_line(df, x_col, y_col, title):
     fig.update_traces(line_color=COLORS["primary"], marker=dict(color=COLORS["primary"], size=5))
     return make_chart(fig, 360)
 
-def chart_card(fig, title=None):
-    if fig is None:
-        return
-    st.plotly_chart(fig, use_container_width=True)
 
-def render_dashboard(df):
+PLOTLY_CDN = '<script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>'
+STACKED_DASHBOARD_CSS = """
+<style>
+.dashboard-container { max-width: 1200px; margin: 0 auto; }
+.dashboard-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+.dashboard-kpi { background: #fff; border: 1px solid #E4E7EB; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); transition: transform 0.2s, box-shadow 0.2s; }
+.dashboard-kpi:hover { transform: translateY(-2px); box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
+.dashboard-kpi-label { font-size: 12px; color: #9CA3AF; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.8px; }
+.dashboard-kpi-value { font-size: 28px; font-weight: 700; }
+.dashboard-section { display: flex; align-items: center; gap: 12px; margin: 28px 0 20px; }
+.dashboard-section::before, .dashboard-section::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, transparent, #E4E7EB, transparent); }
+.dashboard-section span { font-size: 13px; font-weight: 600; color: #9CA3AF; text-transform: uppercase; letter-spacing: 1.5px; }
+.chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.chart-cell { background: #fff; border: 1px solid #E4E7EB; border-radius: 12px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); overflow: hidden; }
+.chart-cell-full { grid-column: 1 / -1; }
+@media (max-width: 768px) { .chart-grid { grid-template-columns: 1fr; } .dashboard-kpis { grid-template-columns: repeat(2, 1fr); } }
+</style>
+"""
+
+def _fig_to_div(fig):
+    if fig is None:
+        return ""
+    return pio.to_html(fig, include_plotlyjs=False, full_html=False)
+
+def _kpi_html(df):
+    has_pred = "Prediction" in df.columns
+    total = len(df)
+    cards = []
+    cards.append(f'<div class="dashboard-kpi" style="border-left:3px solid {COLORS["primary"]};"><div class="dashboard-kpi-label">Total Employees</div><div class="dashboard-kpi-value" style="color:{COLORS["primary"]};">{total:,}</div></div>')
+    if has_pred:
+        att_count = int(df["Prediction"].sum())
+        stay_count = total - att_count
+        att_rate = (att_count / total * 100)
+        cards.append(f'<div class="dashboard-kpi" style="border-left:3px solid {COLORS["danger"]};"><div class="dashboard-kpi-label">Attrition Rate</div><div class="dashboard-kpi-value" style="color:{COLORS["danger"]};">{att_rate:.1f}%</div></div>')
+        cards.append(f'<div class="dashboard-kpi" style="border-left:3px solid {COLORS["danger"]};"><div class="dashboard-kpi-label">Likely to Leave</div><div class="dashboard-kpi-value" style="color:{COLORS["danger"]};">{att_count:,}</div></div>')
+        cards.append(f'<div class="dashboard-kpi" style="border-left:3px solid {COLORS["success"]};"><div class="dashboard-kpi-label">Likely to Stay</div><div class="dashboard-kpi-value" style="color:{COLORS["success"]};">{stay_count:,}</div></div>')
+    else:
+        cards.append(f'<div class="dashboard-kpi" style="border-left:3px solid {COLORS["primary"]};"><div class="dashboard-kpi-label">Data Fields</div><div class="dashboard-kpi-value" style="color:{COLORS["primary"]};">{len(df.columns)}</div></div>')
+        cards.append('<div class="dashboard-kpi"></div><div class="dashboard-kpi"></div>')
+    return f'<div class="dashboard-kpis">{"".join(cards)}</div>'
+
+
+def render_dashboard_to_html(df):
     groups = dict(detect_groups(df))
-    col_map = {k: v for k, v in groups.items()}
+    col_map = groups
     has_pred = "Prediction" in df.columns
 
+    parts = [PLOTLY_CDN, STACKED_DASHBOARD_CSS, '<div class="dashboard-container">']
+
+    parts.append(_kpi_html(df))
+
+    parts.append('<div class="dashboard-section"><span>Analytics Dashboard</span></div>')
+
+    charts = []
+
     if has_pred:
-        st.markdown('<div class="section-divider"><span>Key Performance Indicators</span></div>', unsafe_allow_html=True)
-        kpi_metrics(df)
+        if "Department" in col_map:
+            charts.append(categorical_attrition_bar(df, col_map["Department"], "Department-wise Attrition"))
+        if "JobRole" in col_map:
+            charts.append(categorical_attrition_bar(df, col_map["JobRole"], "Job Role-wise Attrition"))
 
-    st.markdown('<div class="section-divider"><span>Analytics Dashboard</span></div>', unsafe_allow_html=True)
+    if "MonthlyIncome" in col_map:
+        if has_pred:
+            dfc = df.copy()
+            dfc["_status"] = dfc["Prediction"].map({1: "Leave", 0: "Stay"})
+            charts.append(render_box(dfc, "_status", col_map["MonthlyIncome"], "Monthly Income vs Attrition"))
+        else:
+            charts.append(render_histogram(df, col_map["MonthlyIncome"], "Monthly Income Distribution"))
 
-    with st.container():
-        c1, c2 = st.columns(2)
-        with c1:
-            if "Department" in col_map:
-                chart_card(categorical_attrition_bar(df, col_map["Department"], "Department-wise Attrition"))
-        with c2:
-            if "JobRole" in col_map:
-                chart_card(categorical_attrition_bar(df, col_map["JobRole"], "Job Role-wise Attrition"))
+    if "YearsAtCompany" in col_map:
+        if has_pred:
+            charts.append(render_line(df, col_map["YearsAtCompany"], "Prediction", "Tenure vs Attrition"))
+        else:
+            charts.append(render_histogram(df, col_map["YearsAtCompany"], "Years at Company Distribution"))
 
-    with st.container():
-        c1, c2 = st.columns(2)
-        with c1:
-            if "MonthlyIncome" in col_map and has_pred:
-                dfc = df.copy()
-                dfc["_status"] = dfc["Prediction"].map({1: "Leave", 0: "Stay"})
-                chart_card(render_box(dfc, "_status", col_map["MonthlyIncome"], "Monthly Income vs Attrition"))
-            elif "MonthlyIncome" in col_map:
-                chart_card(render_histogram(df, col_map["MonthlyIncome"], "Monthly Income Distribution"))
-        with c2:
-            if "YearsAtCompany" in col_map and has_pred:
-                chart_card(render_line(df, col_map["YearsAtCompany"], "Prediction", "Tenure vs Attrition"))
-            elif "YearsAtCompany" in col_map:
-                chart_card(render_histogram(df, col_map["YearsAtCompany"], "Years at Company Distribution"))
+    if has_pred:
+        if "WorkLifeBalance" in col_map:
+            charts.append(categorical_attrition_bar(df, col_map["WorkLifeBalance"], "Work-Life Balance vs Attrition"))
+        if "OverTime" in col_map:
+            charts.append(categorical_attrition_bar(df, col_map["OverTime"], "Overtime vs Attrition"))
+        if "JobSatisfaction" in col_map:
+            charts.append(categorical_attrition_bar(df, col_map["JobSatisfaction"], "Job Satisfaction vs Attrition"))
 
-    with st.container():
-        c1, c2 = st.columns(2)
-        with c1:
-            if "WorkLifeBalance" in col_map and has_pred:
-                chart_card(categorical_attrition_bar(df, col_map["WorkLifeBalance"], "Work-Life Balance vs Attrition"))
-            if "OverTime" in col_map and has_pred:
-                chart_card(categorical_attrition_bar(df, col_map["OverTime"], "Overtime vs Attrition"))
-            if "JobSatisfaction" in col_map and has_pred:
-                chart_card(categorical_attrition_bar(df, col_map["JobSatisfaction"], "Job Satisfaction vs Attrition"))
-        with c2:
-            if has_pred:
-                rc_col = "Risk_Category" if "Risk_Category" in df.columns else "Risk Category"
-                chart_card(render_grouped_bar_chart(
-                    df.groupby(rc_col).size().reset_index(name="Count"),
-                    rc_col, "Count", "Risk Distribution", agg="sum", ascending=False
-                ) if rc_col in df.columns else None, None)
-            if "Age" in col_map:
-                bins = [0, 20, 30, 40, 50, 60, 200]
-                labels = ["<20", "20-29", "30-39", "40-49", "50-59", "60+"]
-                dfc = df.copy()
-                dc = col_map["Age"]
-                dfc["_age_grp"] = pd.cut(dfc[dc], bins=bins, labels=labels, right=False)
-                ag = dfc["_age_grp"].value_counts().sort_index().reset_index()
-                ag.columns = ["Age Group", "Count"]
-                fig = px.bar(ag, x="Age Group", y="Count", color="Count",
-                             color_continuous_scale="Purples", text="Count", title="Age Distribution")
-                chart_card(make_chart(fig, 340))
-            if "Gender" in col_map:
-                chart_card(render_pie(df, col_map["Gender"], "Gender Distribution"))
-            if "Education" in col_map:
-                chart_card(render_pie(df, col_map["Education"], "Education Distribution"))
-            if "MaritalStatus" in col_map:
-                chart_card(render_pie(df, col_map["MaritalStatus"], "Marital Status Distribution"))
+    if has_pred:
+        rc_col = "Risk_Category" if "Risk_Category" in df.columns else "Risk Category"
+        if rc_col in df.columns:
+            charts.append(render_grouped_bar_chart(
+                df.groupby(rc_col).size().reset_index(name="Count"),
+                rc_col, "Count", "Risk Distribution", agg="sum", ascending=False
+            ))
+
+    if "Age" in col_map:
+        bins = [0, 20, 30, 40, 50, 60, 200]
+        labels = ["<20", "20-29", "30-39", "40-49", "50-59", "60+"]
+        dfc = df.copy()
+        dc = col_map["Age"]
+        dfc["_age_grp"] = pd.cut(dfc[dc], bins=bins, labels=labels, right=False)
+        ag = dfc["_age_grp"].value_counts().sort_index().reset_index()
+        ag.columns = ["Age Group", "Count"]
+        fig = px.bar(ag, x="Age Group", y="Count", color="Count",
+                     color_continuous_scale="Purples", text="Count", title="Age Distribution")
+        charts.append(make_chart(fig, 340))
+
+    if "Gender" in col_map:
+        charts.append(render_pie(df, col_map["Gender"], "Gender Distribution"))
+    if "Education" in col_map:
+        charts.append(render_pie(df, col_map["Education"], "Education Distribution"))
+    if "MaritalStatus" in col_map:
+        charts.append(render_pie(df, col_map["MaritalStatus"], "Marital Status Distribution"))
 
     if not has_pred:
-        c1, c2 = st.columns(2)
-        with c1:
-            for key in ["MonthlyIncome", "Age", "YearsAtCompany", "DailyRate", "HourlyRate", "TotalWorkingYears"]:
-                if key in col_map:
-                    chart_card(render_histogram(df, col_map[key], f"{key} Distribution"))
-                    break
-        with c2:
-            for key in ["Department", "JobRole", "EducationField", "BusinessTravel"]:
-                if key in col_map:
-                    counts = df[col_map[key]].value_counts().reset_index()
-                    counts.columns = [col_map[key], "Count"]
-                    fig = px.bar(counts, x=col_map[key], y="Count", color="Count",
-                                 color_continuous_scale="Viridis", title=f"{key} Distribution")
-                    chart_card(make_chart(fig, 340))
-                    break
+        for key in ["MonthlyIncome", "Age", "YearsAtCompany", "DailyRate", "HourlyRate", "TotalWorkingYears"]:
+            if key in col_map:
+                charts.append(render_histogram(df, col_map[key], f"{key} Distribution"))
+                break
+        for key in ["Department", "JobRole", "EducationField", "BusinessTravel"]:
+            if key in col_map:
+                counts = df[col_map[key]].value_counts().reset_index()
+                counts.columns = [col_map[key], "Count"]
+                fig = px.bar(counts, x=col_map[key], y="Count", color="Count",
+                             color_continuous_scale="Viridis", title=f"{key} Distribution")
+                charts.append(make_chart(fig, 340))
+                break
+
+    charts = [c for c in charts if c is not None]
+
+    parts.append('<div class="chart-grid">')
+    for i, fig in enumerate(charts):
+        full = i == len(charts) - 1 and len(charts) % 2 == 1
+        cls = "chart-cell chart-cell-full" if full else "chart-cell"
+        parts.append(f'<div class="{cls}">{_fig_to_div(fig)}</div>')
+    parts.append('</div>')
+
+    parts.append('</div>')
+    return '\n'.join(parts)
