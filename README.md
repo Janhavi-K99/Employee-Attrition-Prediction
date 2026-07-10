@@ -361,7 +361,7 @@ The system uses fuzzy string matching to recognize columns regardless of naming 
 
 ## Author / Contact
 
-**Janhavi K.**
+**Janhavi Kolamkar**
 
 - GitHub: [@Janhavi-K99](https://github.com/Janhavi-K99)
 - Project Repository: [Employee-Attrition-Prediction](https://github.com/Janhavi-K99/Employee-Attrition-Prediction)
