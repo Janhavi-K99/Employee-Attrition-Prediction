@@ -1,3 +1,14 @@
+---
+title: Employee Attrition Prediction
+emoji: 📊
+colorFrom: blue
+colorTo: indigo
+sdk: streamlit
+sdk_version: 1.32.0
+app_file: app.py
+pinned: false
+---
+
 # Employee Attrition Prediction
 
 A machine learning-powered web application that predicts employee attrition risk using HR data. Built with Streamlit and scikit-learn (Logistic Regression). This tool helps HR teams and managers identify employees at risk of leaving, understand the key drivers of attrition, and take proactive retention measures.
@@ -141,16 +152,29 @@ The repository includes `dataset/employees.csv` (IBM HR Analytics Employee Attri
 
 ## Deployment
 
+### Hugging Face Spaces (Free, Recommended)
+
+1. Go to [Hugging Face Spaces](https://huggingface.co/new-space)
+2. Enter **Space Name**: `employee-attrition-prediction`
+3. Select **SDK**: `Streamlit`
+4. Under **Space Template**, select **Docker** > **Streamlit 1.32**
+5. Click **Create Space**
+6. In the next screen, go to **Settings** → **Repository** → click **"Connect to Git"**
+7. Choose **GitHub** and connect `Janhavi-K99/Employee-Attrition-Prediction`
+8. The app deploys automatically — your live URL will be:
+   `https://huggingface.co/spaces/Janhavi-K99/employee-attrition-prediction`
+
+> No credit card required. Spaces with CPU sleep after inactivity but never expire for personal projects.
+
 ### Streamlit Cloud (Free)
 
 1. Push this repository to GitHub
 2. Go to [Streamlit Cloud](https://streamlit.io/cloud) and sign in with GitHub
 3. Click **"New app"**, select your repo, set main file to `app.py`
-4. Click **Deploy** — the platform auto-installs dependencies and launches the app
+4. Click **Deploy**
 
 ### Alternative Platforms
 
-- **Hugging Face Spaces** — Create a Space with Streamlit SDK, push code
 - **Render** — Use a Web Service with `streamlit run app.py` as start command
 - **Docker** — Build a container using the provided `requirements.txt`
 
